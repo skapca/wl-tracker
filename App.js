@@ -56,6 +56,8 @@ const normalizeItem = (item) => {
 export default function App() {
   const [data, setData] = useState({});
   const [activeMenuDate, setActiveMenuDate] = useState(null); // Date key for row edit modal
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(() => new Date());
   
   // Badge Action Modal State: { dateKey, index, type, note }
   const [badgeModal, setBadgeModal] = useState(null);
@@ -230,20 +232,34 @@ export default function App() {
     setActiveMenuDate(null);
   };
 
-  // Add earlier day
-  const handleAddPreviousDay = () => {
-    const sortedKeys = Object.keys(data).sort().reverse();
-    let oldestDate = new Date();
-    if (sortedKeys.length > 0) {
-      const [y, m, d] = sortedKeys[sortedKeys.length - 1].split('-').map(Number);
-      oldestDate = new Date(y, m - 1, d);
-    }
-    oldestDate.setDate(oldestDate.getDate() - 1);
-    const prevKey = formatDateKey(oldestDate);
+  const openDayPicker = () => {
+    setPickerMonth(new Date());
+    setDayPickerVisible(true);
+  };
 
-    if (!data[prevKey]) {
-      updateData({ ...data, [prevKey]: [] });
+  const shiftPickerMonth = (delta) => {
+    setPickerMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  };
+
+  const handleAddDay = (dateKey) => {
+    if (data[dateKey]) {
+      setDayPickerVisible(false);
+      return;
     }
+    updateData({ ...data, [dateKey]: [] });
+    setDayPickerVisible(false);
+  };
+
+  const getCalendarCells = (monthDate) => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = Array(firstWeekday).fill(null);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      cells.push(formatDateKey(new Date(year, month, day)));
+    }
+    return cells;
   };
 
   // Calculate Statistics
@@ -395,10 +411,10 @@ export default function App() {
         <View style={styles.footerActions}>
           <TouchableOpacity
             style={styles.footerBtn}
-            onPress={handleAddPreviousDay}
+            onPress={openDayPicker}
             activeOpacity={0.7}
           >
-            <Text style={styles.footerBtnText}>+ Add Earlier Day</Text>
+            <Text style={styles.footerBtnText}>+ Add Another Day</Text>
           </TouchableOpacity>
         </View>
 
@@ -594,6 +610,95 @@ export default function App() {
                   </View>
                 </TouchableWithoutFeedback>
               </KeyboardAvoidingView>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        <Modal
+          visible={dayPickerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setDayPickerVisible(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setDayPickerVisible(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={[styles.modalCard, styles.dayPickerCard]}>
+                  <Text style={styles.modalTitle}>Add Another Day</Text>
+                  <Text style={styles.modalSubTitle}>Choose a date to add</Text>
+
+                  <View style={styles.calendarNav}>
+                    <TouchableOpacity
+                      style={styles.calendarNavBtn}
+                      onPress={() => shiftPickerMonth(-1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.calendarNavBtnText}>‹</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.calendarMonthLabel}>
+                      {pickerMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.calendarNavBtn}
+                      onPress={() => shiftPickerMonth(1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.calendarNavBtnText}>›</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.calendarWeekRow}>
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, idx) => (
+                      <Text key={`${label}-${idx}`} style={styles.calendarWeekday}>
+                        {label}
+                      </Text>
+                    ))}
+                  </View>
+
+                  <View style={styles.calendarGrid}>
+                    {getCalendarCells(pickerMonth).map((dateKey, idx) => {
+                      if (!dateKey) {
+                        return <View key={`empty-${idx}`} style={styles.calendarDayCell} />;
+                      }
+
+                      const alreadyAdded = Boolean(data[dateKey]) || dateKey === todayKey;
+                      const isToday = dateKey === todayKey;
+                      const [, , dayPart] = dateKey.split('-');
+
+                      return (
+                        <TouchableOpacity
+                          key={dateKey}
+                          style={[
+                            styles.calendarDayCell,
+                            isToday && styles.calendarDayToday,
+                            alreadyAdded && styles.calendarDayAdded,
+                          ]}
+                          onPress={() => handleAddDay(dateKey)}
+                          disabled={alreadyAdded}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.calendarDayText,
+                              isToday && styles.calendarDayTextToday,
+                              alreadyAdded && styles.calendarDayTextAdded,
+                            ]}
+                          >
+                            {Number(dayPart)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.modalBtnCompact, styles.modalBtnCancel, { marginTop: 12, width: '100%' }]}
+                    onPress={() => setDayPickerVisible(false)}
+                  >
+                    <Text style={styles.modalBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
@@ -994,5 +1099,74 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '600',
     fontSize: 13,
+  },
+  dayPickerCard: {
+    maxWidth: 340,
+    alignItems: 'stretch',
+  },
+  calendarNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarNavBtnText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#334155',
+    lineHeight: 24,
+  },
+  calendarMonthLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  calendarWeekday: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: '14.2857%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayToday: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 10,
+  },
+  calendarDayAdded: {
+    opacity: 0.45,
+  },
+  calendarDayText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  calendarDayTextToday: {
+    color: '#4338CA',
+  },
+  calendarDayTextAdded: {
+    color: '#94A3B8',
   },
 });
